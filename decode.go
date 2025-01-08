@@ -34,10 +34,7 @@ type Decoder struct {
 	or         offsetReader
 	keyBox     []byte
 	dataOffset int64
-	Metadata   struct {
-		// Format is music file extension name, e.g. "mp3"
-		Format string `json:"format"`
-	}
+	Metadata   Metadata
 }
 
 func (d *Decoder) readHeader() error {
