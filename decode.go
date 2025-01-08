@@ -67,8 +67,15 @@ func (d *Decoder) readHeader() error {
 		key[i] ^= 0x64
 	}
 	masterCipher := newCipher(masterKey)
-	decryptAll(masterCipher, key)
-	key = unpad(key)[17:]
+	err = decryptAll(masterCipher, key)
+	if err != nil {
+		return fmt.Errorf("decrypt data: %w", err)
+	}
+	key, err = unpad(key)
+	if err != nil {
+		return fmt.Errorf("unpad: %w", err)
+	}
+	key = key[17:]
 	keyLen = len(key)
 	keyBox := make([]byte, 256)
 	for i := range keyBox {
@@ -106,8 +113,15 @@ func (d *Decoder) readHeader() error {
 		return fmt.Errorf("decode metadata base64 string: %w", err)
 	}
 	metadataCipher := newCipher(metadataKey)
-	decryptAll(metadataCipher, metadata)
-	metadata = unpad(metadata)[6:]
+	err = decryptAll(metadataCipher, metadata)
+	if err != nil {
+		return fmt.Errorf("decrypt metadata: %w", err)
+	}
+	metadata, err = unpad(metadata)
+	if err != nil {
+		return fmt.Errorf("unpad: %w", err)
+	}
+	metadata = metadata[6:]
 	err = json.Unmarshal(metadata, &d.Metadata)
 	if err != nil {
 		return fmt.Errorf("unmarshal metadata JSON: 0x%s, error: %w",
