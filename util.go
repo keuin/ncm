@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"io"
+	"reflect"
 	"unsafe"
 )
 
@@ -12,7 +13,8 @@ func unsafeString(b []byte) string {
 }
 
 func unsafeBytes(s string) []byte {
-	return *(*[]byte)(unsafe.Pointer(&s))
+	h := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	return unsafe.Slice((*byte)(unsafe.Pointer(h.Data)), h.Len)
 }
 
 func skip(r io.Reader, n int64) error {
