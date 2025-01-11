@@ -32,8 +32,8 @@ func (o *offsetReader) Read(buf []byte) (n int, err error) {
 // Do not instantiate it directly, use NewDecoder instead.
 type Decoder struct {
 	or         offsetReader
-	keyBox     []byte
 	dataOffset int64
+	keyBox     [256]byte
 	Metadata   Metadata
 }
 
@@ -41,7 +41,7 @@ func (d *Decoder) readHeader() error {
 	if d.or.Offset != 0 {
 		return nil
 	}
-	var buf [64]byte
+	var buf [128]byte
 	_, err := io.ReadFull(&d.or, buf[:len(fileHeader)])
 	if err != nil {
 		return fmt.Errorf("read file header: %w", err)
@@ -58,7 +58,12 @@ func (d *Decoder) readHeader() error {
 		return fmt.Errorf("read keylen: %w", err)
 	}
 	keyLen := int(binary.LittleEndian.Uint32(buf[:]))
-	key := make([]byte, keyLen)
+	var key []byte
+	if keyLen < len(buf) {
+		key = buf[:]
+	} else {
+		key = make([]byte, keyLen)
+	}
 	_, err = io.ReadFull(&d.or, key)
 	if err != nil {
 		return fmt.Errorf("read key: %w", err)
@@ -77,19 +82,17 @@ func (d *Decoder) readHeader() error {
 	}
 	key = key[17:]
 	keyLen = len(key)
-	keyBox := make([]byte, 256)
-	for i := range keyBox {
-		keyBox[i] = byte(i)
+	for i := range d.keyBox {
+		d.keyBox[i] = byte(i)
 	}
-	d.keyBox = keyBox
 	var prev byte
 	var offset int
-	for i := range keyBox {
-		v := keyBox[i]
+	for i := range d.keyBox {
+		v := d.keyBox[i]
 		c := (v + prev + key[offset]) & 0xff
 		offset = (offset + 1) % keyLen
-		keyBox[i] = keyBox[c]
-		keyBox[c] = v
+		d.keyBox[i] = d.keyBox[c]
+		d.keyBox[c] = v
 		prev = c
 	}
 	_, err = io.ReadFull(&d.or, buf[:4])
