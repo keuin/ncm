@@ -57,3 +57,9 @@ func decryptAll(c cipher.Block, buf []byte) error {
 	}
 	return nil
 }
+
+func assert(b bool, err string) {
+	if !b {
+		panic(err)
+	}
+}

@@ -1,7 +1,6 @@
 package ncm
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -11,10 +10,11 @@ import (
 )
 
 const (
-	masterKey      = "hzHRAmso5kInbaxW"
-	metadataKey    = "#14ljk_!\\]&0U<'("
-	fileHeader     = "CTENFDAM"
-	metadataHeader = "163 key(Don't modify):"
+	masterKey       = "hzHRAmso5kInbaxW"
+	metadataKey     = "#14ljk_!\\]&0U<'("
+	fileHeader      = "CTENFDAM"
+	metadataHeader  = "163 key(Don't modify):"
+	metadataHeader2 = "music:"
 )
 
 type offsetReader struct {
@@ -41,13 +41,13 @@ func (d *Decoder) readHeader() error {
 	if d.or.Offset != 0 {
 		return nil
 	}
-	var buf [8]byte
-	_, err := io.ReadFull(&d.or, buf[:])
+	var buf [64]byte
+	_, err := io.ReadFull(&d.or, buf[:len(fileHeader)])
 	if err != nil {
 		return fmt.Errorf("read file header: %w", err)
 	}
-	if unsafeString(buf[:]) != fileHeader {
-		return fmt.Errorf("invalid file header: 0x%s", hex.EncodeToString(buf[:]))
+	if unsafeString(buf[:len(fileHeader)]) != fileHeader {
+		return fmt.Errorf("invalid file header: 0x%s", hex.EncodeToString(buf[:len(fileHeader)]))
 	}
 	err = skip(&d.or, 2)
 	if err != nil {
@@ -96,36 +96,40 @@ func (d *Decoder) readHeader() error {
 	if err != nil {
 		return fmt.Errorf("read metadataLen: %w", err)
 	}
-	metadataLen := int(binary.LittleEndian.Uint32(buf[:]))
-	metadata := make([]byte, metadataLen)
-	_, err = io.ReadFull(&d.or, metadata)
+	metadataLen := int64(binary.LittleEndian.Uint32(buf[:])) - int64(len(metadataHeader))
+	mhdr := buf[:len(metadataHeader)]
+	_, err = io.ReadFull(&d.or, mhdr)
 	if err != nil {
-		return err
+		return fmt.Errorf("read metadataHeader: %w", err)
 	}
-	for i := range metadata {
-		metadata[i] ^= 0x63
+	for i := range mhdr {
+		mhdr[i] ^= 0x63
 	}
-	if !bytes.HasPrefix(metadata, unsafeBytes(metadataHeader)) {
-		return fmt.Errorf("invalid metadata header: 0x%s", hex.EncodeToString(metadata))
+	if b := mhdr; unsafeString(mhdr) != metadataHeader {
+		return fmt.Errorf("invalid metadata header: 0x%s", hex.EncodeToString(b))
 	}
-	metadata, err = base64.StdEncoding.DecodeString(unsafeString(metadata[len(metadataHeader):]))
+	// ciphertext = XOR(Base64(AES(cleartext)))
+	cr := streamBlockCipherDecrypt{
+		R: base64.NewDecoder(base64.StdEncoding, XorReader{
+			R:    io.LimitReader(&d.or, metadataLen),
+			Byte: 0x63,
+		}),
+		Cipher: newCipher(metadataKey),
+	}
+	_, err = io.ReadFull(&cr, buf[:len(metadataHeader2)])
 	if err != nil {
-		return fmt.Errorf("decode metadata base64 string: %w", err)
+		return fmt.Errorf("read metadata header: %w", err)
 	}
-	metadataCipher := newCipher(metadataKey)
-	err = decryptAll(metadataCipher, metadata)
-	if err != nil {
-		return fmt.Errorf("decrypt metadata: %w", err)
+	if unsafeString(buf[:len(metadataHeader2)]) != metadataHeader2 {
+		return fmt.Errorf("invalid metadataHeader2: 0x%s", hex.EncodeToString(buf[:len(metadataHeader2)]))
 	}
-	metadata, err = unpad(metadata)
+	err = json.NewDecoder(&cr).Decode(&d.Metadata)
 	if err != nil {
-		return fmt.Errorf("unpad: %w", err)
+		return fmt.Errorf("decode metadata JSON: %w", err)
 	}
-	metadata = metadata[6:]
-	err = json.Unmarshal(metadata, &d.Metadata)
+	_, err = io.Copy(io.Discard, &cr) // consume all padding bytes
 	if err != nil {
-		return fmt.Errorf("unmarshal metadata JSON: 0x%s, error: %w",
-			hex.Dump(metadata), err)
+		return fmt.Errorf("read metadata cipher padding: %w", err)
 	}
 	err = skip(&d.or, 4+5) // crc32 sum (4byte) + dummy data (5byte)
 	if err != nil {
