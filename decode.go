@@ -102,17 +102,18 @@ func (d *Decoder) readHeader() error {
 	if err != nil {
 		return fmt.Errorf("read metadataHeader: %w", err)
 	}
+	const metadataXorByte byte = 0x63
 	for i := range mhdr {
-		mhdr[i] ^= 0x63
+		mhdr[i] ^= metadataXorByte
 	}
 	if b := mhdr; unsafeString(mhdr) != metadataHeader {
 		return fmt.Errorf("invalid metadata header: 0x%s", hex.EncodeToString(b))
 	}
 	// ciphertext = XOR(Base64(AES(cleartext)))
 	cr := streamBlockCipherDecrypt{
-		R: base64.NewDecoder(base64.StdEncoding, XorReader{
+		R: base64.NewDecoder(base64.StdEncoding, xorReader{
 			R:    io.LimitReader(&d.or, metadataLen),
-			Byte: 0x63,
+			Byte: metadataXorByte,
 		}),
 		Cipher: newCipher(metadataKey),
 	}

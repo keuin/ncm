@@ -61,12 +61,12 @@ func (s *streamBlockCipherDecrypt) Read(dst []byte) (n int, err error) {
 	return n, err
 }
 
-type XorReader struct {
+type xorReader struct {
 	R    io.Reader
 	Byte byte
 }
 
-func (x XorReader) Read(buf []byte) (n int, err error) {
+func (x xorReader) Read(buf []byte) (n int, err error) {
 	n, err = x.R.Read(buf)
 	for i := 0; i < n; i++ {
 		buf[i] ^= x.Byte
