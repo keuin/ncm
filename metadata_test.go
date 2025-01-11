@@ -29,11 +29,21 @@ func TestArtist_UnmarshalJSON(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			fields: fields{
+				ID:   123,
+				Name: "name",
+			},
+			args: args{
+				data: []byte(`["name","123"]`),
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &Artist{
-				ID:   tt.fields.ID,
+				ID:   ID(tt.fields.ID),
 				Name: tt.fields.Name,
 			}
 			if err := a.UnmarshalJSON(tt.args.data); (err != nil) != tt.wantErr {
@@ -69,6 +79,47 @@ func TestMetadata_UnmarshalJSON(t *testing.T) {
         "abc"
     ],
     "format": "mp3"
+}`), m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Artist) != 1 {
+		t.Fail()
+	}
+	if m.MusicID != 123 {
+		t.Fail()
+	}
+}
+
+func TestMetadata_UnmarshalJSON_2(t *testing.T) {
+	m := new(Metadata)
+	err := json.Unmarshal([]byte(`{
+    "musicId": "123",
+    "musicName": "abc",
+    "artist": [
+        [
+            "abc",
+            "123"
+        ]
+    ],
+    "albumId": "123",
+    "album": "abc",
+    "albumPicDocId": "123123",
+    "albumPic": "abc",
+    "bitrate": 123123,
+    "mp3DocId": "abc",
+    "duration": 123,
+    "mvId": "123",
+    "alias": [
+        "abc"
+    ],
+    "transNames": [
+        "abc"
+    ],
+    "format": "mp3",
+    "fee": 1,
+    "volumeDelta": -5.246,
+    "privilege":{"flag":123}
 }`), m)
 	if err != nil {
 		t.Fatal(err)
